@@ -1,0 +1,175 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum RoomMode {
+  GAMEPLAY
+  PODCAST
+  WATCH
+}
+
+enum SpotlightMode {
+  HOST
+  EQUAL
+  ROTATE
+  EVENT
+}
+
+enum InviteRole {
+  GUEST
+}
+
+enum ParticipantRole {
+  HOST
+  GUEST
+}
+
+enum ParticipantStatus {
+  JOINED
+  LEFT
+  KICKED
+}
+
+enum CrewMemberRole {
+  OWNER
+  MEMBER
+}
+
+enum MatchStatus {
+  PENDING
+  LIVE
+  ENDED
+}
+
+enum MatchSide {
+  A
+  B
+}
+
+model User {
+  id            String   @id @default(cuid())
+  email         String   @unique
+  name          String?
+  avatarUrl     String?
+  theme         String   @default("Arena")
+  reducedMotion Boolean  @default(false)
+  highContrast  Boolean  @default(false)
+  menuSfx       Boolean  @default(true)
+  crowdFx       Boolean  @default(false)
+  familyMode    Boolean  @default(false)
+  createdAt     DateTime @default(now())
+}
+
+model Room {
+  id                 String         @id @default(cuid())
+  roomCode           String         @unique
+  hostUserId         String
+  mode               RoomMode       @default(GAMEPLAY)
+  hostPriority       Boolean        @default(true)
+  spotlightMode      SpotlightMode  @default(HOST)
+  automationEnabled  Boolean        @default(true)
+  randomStyleEnabled Boolean        @default(true)
+  discordInviteUrl   String?
+  isBattleMode       Boolean        @default(false)
+  matchId            String?
+  createdAt          DateTime       @default(now())
+  endedAt            DateTime?
+}
+
+model Invite {
+  id        String    @id @default(cuid())
+  roomId    String
+  token     String    @unique
+  role      InviteRole @default(GUEST)
+  expiresAt DateTime
+}
+
+model RoomParticipant {
+  id           String            @id @default(cuid())
+  roomId       String
+  role         ParticipantRole
+  displayName  String
+  avatarUrl    String?
+  joinedAt     DateTime         @default(now())
+  leftAt       DateTime?
+  status       ParticipantStatus @default(JOINED)
+  vdoId        String
+  isAudioFocus Boolean          @default(false)
+}
+
+model RoomEvent {
+  id        String   @id @default(cuid())
+  roomId    String
+  type      String
+  payload   Json
+  createdAt DateTime @default(now())
+}
+
+model ChatMessage {
+  id         String   @id @default(cuid())
+  roomId     String
+  senderName String
+  senderRole String
+  text       String
+  createdAt  DateTime @default(now())
+}
+
+model Crew {
+  id        String   @id @default(cuid())
+  name      String
+  slug      String   @unique
+  avatarUrl String?
+  color     String?
+  createdAt DateTime @default(now())
+}
+
+model CrewMember {
+  id       String         @id @default(cuid())
+  crewId   String
+  userId   String
+  role     CrewMemberRole @default(MEMBER)
+  joinedAt DateTime       @default(now())
+}
+
+model Season {
+  id       String   @id @default(cuid())
+  name     String
+  startsAt DateTime
+  endsAt   DateTime
+  isActive Boolean  @default(true)
+}
+
+model Match {
+  id        String      @id @default(cuid())
+  seasonId  String
+  roomId    String
+  status    MatchStatus @default(PENDING)
+  startedAt DateTime?
+  endedAt   DateTime?
+}
+
+model MatchTeam {
+  id             String    @id @default(cuid())
+  matchId        String
+  crewId         String
+  side           MatchSide
+  scoreHype      Int       @default(0)
+  scoreTelemetry Int       @default(0)
+  scoreTotal     Int       @default(0)
+}
+
+model CrewStatsSeason {
+  id         String @id @default(cuid())
+  seasonId   String
+  crewId     String
+  wins       Int    @default(0)
+  losses     Int    @default(0)
+  scoreTotal Int    @default(0)
+  level      Int    @default(1)
+  xp         Int    @default(0)
+}

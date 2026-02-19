@@ -1,0 +1,31 @@
+{
+  "name": "bigroom-monorepo",
+  "private": true,
+  "packageManager": "pnpm@10.18.3",
+  "scripts": {
+    "dev": "pnpm run preflight && pnpm -r --parallel dev",
+    "build": "pnpm -r build",
+    "lint": "pnpm -r lint",
+    "typecheck": "pnpm -r typecheck",
+    "format": "pnpm -r format",
+    "preflight": "node scripts/preflight.mjs",
+    "test:v12.3:contracts": "pnpm --filter @ezplay/contracts test",
+    "test:v12.3:harness": "node scripts/v12_3_harness.mjs",
+    "test:v12.3:ws": "pnpm --filter @bigroom/ws test:v12.3",
+    "test:v12.5:load:small": "node scripts/v12_5_load_harness.mjs small",
+    "test:v12.5:load:large": "node scripts/v12_5_load_harness.mjs large",
+    "test:v12.5:spike": "node scripts/v12_5_load_harness.mjs spike",
+    "test:v12.6:profile": "node scripts/v12_6_profile.mjs",
+    "test:v12.6:soak:10m": "node scripts/v12_5_load_harness.mjs soak10m",
+    "test:v12.7:router": "pnpm --filter @bigroom/ws exec tsx --test ../../apps/web/lib/node-router.test.ts",
+    "dev:ws:dual": "bash -lc \"NODE_ID=A WS_PORT=3001 pnpm --filter @bigroom/ws dev & NODE_ID=B WS_PORT=3002 pnpm --filter @bigroom/ws dev & wait\"",
+    "test:v12.7:dual:harness": "node scripts/v12_7_dual_harness.mjs",
+    "test:v12.7:load:split": "node scripts/v12_7_split_load_harness.mjs small",
+    "test:v12.7:load:split:large": "node scripts/v12_7_split_load_harness.mjs large",
+    "test:v12.7:failover": "node scripts/v12_7_failover_harness.mjs",
+    "test:v12.9:config": "pnpm --filter @bigroom/ws test:v12.9:config",
+    "test:v12.9:safemode": "node scripts/v12_9_safemode_harness.mjs",
+    "test:v12.9:feedback": "pnpm --filter @bigroom/ws exec tsx --test ../../apps/web/lib/feedback-context.test.ts ../../apps/web/lib/error-copy.test.ts && node scripts/v12_9_feedback_test.mjs",
+    "test:v12.9:alpha-gate": "pnpm test:v12.9:config && pnpm test:v12.9:safemode && pnpm test:v12.9:feedback && pnpm test:v12.7:router"
+  }
+}
