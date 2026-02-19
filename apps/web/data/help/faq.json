@@ -1,0 +1,5 @@
+[
+  {"id":"obs-setup","q":"How do I add EzPlay to OBS?","a":"In Studio, copy the Program URL and add it as a Browser Source in OBS. Use 1920x1080 (or ?res=720 for 1280x720)."},
+  {"id":"program-token","q":"Program token invalid","a":"Open Studio and copy the latest Program URL with token. If WS is offline, start pnpm dev at repo root first."},
+  {"id":"watch-modes","q":"Stage vs Sync mode","a":"Stage mode attempts embed playback when platform policies allow it. Sync mode keeps EzPlay HUD active and opens platform streams in a new tab."}
+]

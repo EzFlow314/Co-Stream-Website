@@ -1,0 +1,40 @@
+{
+  "generatedAt": "2026-02-18T20:06:10.437Z",
+  "mode": "small",
+  "ok": true,
+  "result": {
+    "pass": true,
+    "profile": {
+      "rooms": 10,
+      "participantsPerRoom": 5,
+      "eventsPerParticipant": 2,
+      "durationMs": 3000
+    },
+    "totalSent": 1400,
+    "metrics": {
+      "ok": true,
+      "rooms_active": 11,
+      "telemetry": {
+        "accepted_per_sec": 103.857,
+        "dropped_per_sec": 45.286,
+        "discarded_per_sec": 99.571
+      },
+      "broadcast_rate_hz": 19.143,
+      "tick_ms_avg": 0.41,
+      "tick_ms_p95": 1,
+      "tick_overrun_count": 0,
+      "maintenance_state": "ACTIVE",
+      "ws_uptime": 7,
+      "protection_mode": "NORMAL",
+      "caps": {
+        "max_active_rooms": 500,
+        "max_participants_per_room": 20
+      }
+    },
+    "memory": {
+      "startMb": 4,
+      "endMb": 23,
+      "slopeMb": 19
+    }
+  }
+}

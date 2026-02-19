@@ -1,0 +1,11 @@
+{
+  "meta": { "name": "golden_clutch_match_v12_4" },
+  "events": [
+    { "ts": 0, "participantId": "host", "type": "KILL", "intensity": 4, "statDelta": { "kills": 1, "score": 2 } },
+    { "ts": 600, "participantId": "guest1", "type": "ASSIST", "intensity": 3, "statDelta": { "assists": 1 } },
+    { "ts": 1200, "participantId": "host", "type": "OBJECTIVE", "intensity": 5, "statDelta": { "objectives": 1, "score": 3 } },
+    { "ts": 1900, "participantId": "guest2", "type": "SCORE", "intensity": 2, "statDelta": { "score": 1 } },
+    { "ts": 2600, "participantId": "host", "type": "KILL", "intensity": 4, "statDelta": { "kills": 1 } },
+    { "ts": 3400, "participantId": "guest1", "type": "OBJECTIVE", "intensity": 4, "statDelta": { "objectives": 1 } }
+  ]
+}

@@ -1,0 +1,7 @@
+{
+  "small": {
+    "tick_p95_max": 20,
+    "broadcast_hz_max": 60,
+    "memory_slope_mb_max": 80
+  }
+}

@@ -1,0 +1,3 @@
+[
+  {"id":"go-live","title":"Go Live in < 60s","steps":["Open /room/new and create room","Open /studio/[roomCode]","Copy Program URL to OBS Browser Source","Invite guests with join link","Start stream from OBS"]}
+]
