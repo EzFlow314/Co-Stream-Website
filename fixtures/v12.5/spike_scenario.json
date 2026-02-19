@@ -1,0 +1,6 @@
+{
+  "steps": [
+    { "rooms": 5, "participantsPerRoom": 5, "eventsPerParticipant": 3, "durationMs": 3000 },
+    { "rooms": 50, "participantsPerRoom": 10, "eventsPerParticipant": 4, "durationMs": 30000 }
+  ]
+}

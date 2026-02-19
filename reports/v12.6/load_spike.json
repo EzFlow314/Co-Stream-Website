@@ -1,0 +1,81 @@
+{
+  "generatedAt": "2026-02-18T20:07:04.982Z",
+  "mode": "spike",
+  "ok": true,
+  "result": {
+    "pass": true,
+    "mode": "spike",
+    "outputs": [
+      {
+        "pass": true,
+        "profile": {
+          "rooms": 5,
+          "participantsPerRoom": 5,
+          "eventsPerParticipant": 3,
+          "durationMs": 3000
+        },
+        "totalSent": 1050,
+        "metrics": {
+          "ok": true,
+          "rooms_active": 5,
+          "telemetry": {
+            "accepted_per_sec": 88.25,
+            "dropped_per_sec": 69.75,
+            "discarded_per_sec": 104.5
+          },
+          "broadcast_rate_hz": 16.25,
+          "tick_ms_avg": 0.17,
+          "tick_ms_p95": 1,
+          "tick_overrun_count": 0,
+          "maintenance_state": "ACTIVE",
+          "ws_uptime": 4,
+          "protection_mode": "NORMAL",
+          "caps": {
+            "max_active_rooms": 500,
+            "max_participants_per_room": 20
+          }
+        },
+        "memory": {
+          "startMb": 4,
+          "endMb": 16,
+          "slopeMb": 12
+        }
+      },
+      {
+        "pass": true,
+        "profile": {
+          "rooms": 50,
+          "participantsPerRoom": 10,
+          "eventsPerParticipant": 4,
+          "durationMs": 30000
+        },
+        "totalSent": 98600,
+        "metrics": {
+          "ok": true,
+          "rooms_active": 55,
+          "telemetry": {
+            "accepted_per_sec": 684.324,
+            "dropped_per_sec": 39.622,
+            "discarded_per_sec": 1969.297
+          },
+          "broadcast_rate_hz": 92.378,
+          "tick_ms_avg": 1.72,
+          "tick_ms_p95": 4,
+          "tick_overrun_count": 0,
+          "maintenance_state": "ACTIVE",
+          "ws_uptime": 37,
+          "protection_mode": "NORMAL",
+          "caps": {
+            "max_active_rooms": 500,
+            "max_participants_per_room": 20
+          }
+        },
+        "memory": {
+          "startMb": 16,
+          "endMb": 29,
+          "slopeMb": 13
+        }
+      }
+    ]
+  }
+}

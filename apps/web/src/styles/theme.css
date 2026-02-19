@@ -1,0 +1,27 @@
+:root {
+  --ez-bg0: 13 18 27;
+  --ez-bg1: 18 26 39;
+  --ez-panel: 23 33 48;
+  --ez-border: 69 90 121;
+  --ez-text: 240 249 255;
+  --ez-muted: 148 163 184;
+  --ez-accent: 58 168 255;
+  --ez-accent2: 255 196 67;
+  --ez-danger: 248 113 113;
+  --ez-success: 74 222 128;
+  --ez-glow: 0 0 20px rgb(34 211 238 / 0.28);
+  --ez-shadow: 0 8px 22px rgb(0 0 0 / 0.45);
+  --ez-font-display: 'Teko', sans-serif;
+  --ez-font-body: 'Inter', sans-serif;
+  --ez-letter-spacing: .04em;
+  --ez-font-weight: 700;
+  --ez-card-radius: 16px;
+  --ez-button-radius: 8px;
+  --ez-border-width: 2px;
+  --ez-outline-style: solid;
+  --ez-transition-ms: 180;
+  --ez-easing: cubic-bezier(.2,.8,.2,1);
+  --ez-texture-bg: none;
+  --ez-texture-panel: none;
+  --ez-home-glow: .35;
+}

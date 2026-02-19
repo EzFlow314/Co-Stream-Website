@@ -1,0 +1,31 @@
+{
+  "name": "@bigroom/ws",
+  "version": "0.1.0",
+  "type": "module",
+  "scripts": {
+    "dev": "tsx watch src/index.ts",
+    "build": "tsup src/index.ts --format esm --dts false",
+    "start": "node dist/index.js",
+    "typecheck": "tsc --noEmit",
+    "test:v12.3": "tsx --test src/v12_3_logic.test.ts",
+    "test:v12.5:registry": "tsx --test src/room-registry.test.ts",
+    "test:v12.5": "tsx --test src/v12_3_logic.test.ts src/room-registry.test.ts",
+    "test:v12.9:config": "tsx --test src/config.test.ts",
+    "test:v12.9:safemode": "tsx --test src/v12_3_logic.test.ts src/config.test.ts"
+  },
+  "dependencies": {
+    "@bigroom/shared": "workspace:*",
+    "express": "^4.21.1",
+    "ws": "^8.18.0",
+    "cors": "^2.8.5",
+    "@ezplay/contracts": "workspace:*"
+  },
+  "devDependencies": {
+    "@types/express": "^5.0.0",
+    "@types/ws": "^8.5.13",
+    "tsup": "^8.3.5",
+    "tsx": "^4.19.2",
+    "typescript": "^5.6.3",
+    "@types/cors": "^2.8.17"
+  }
+}

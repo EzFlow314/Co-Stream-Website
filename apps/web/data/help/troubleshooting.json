@@ -1,0 +1,5 @@
+[
+  {"id":"ws-offline","keywords":["econnrefused","offline","ws","realtime"],"answer":"Realtime service offline. Run pnpm dev at repo root to launch web + ws + bridge."},
+  {"id":"tile-stalled","keywords":["stalled","connecting","tile"],"answer":"Use Reconnect All, then Rebuild Tile, then Regen vdoId for that participant in Studio."},
+  {"id":"telemetry","keywords":["telemetry","stats","not connected"],"answer":"Keep Telemetry Mode ON, use Test Telemetry in Studio, and confirm bridge /health is OK."}
+]
