@@ -1,4 +1,5 @@
 import { spawn } from "node:child_process";
+import { rm } from "node:fs/promises";
 
 const wait = (ms) => new Promise((r) => setTimeout(r, ms));
 const web = spawn("pnpm", ["--filter", "@bigroom/web", "exec", "next", "dev", "-p", "3050"], { stdio: ["ignore", "pipe", "pipe"], env: { ...process.env } });
@@ -26,4 +27,5 @@ try {
   console.log("[v12.9:feedback] PASS", { id: json.id });
 } finally {
   web.kill("SIGTERM");
+  await rm("reports/feedback", { recursive: true, force: true });
 }

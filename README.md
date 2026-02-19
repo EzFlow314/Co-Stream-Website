@@ -406,3 +406,19 @@ Manual/nightly:
 - `pnpm test:v12.9:alpha-gate`
 - `pnpm -r typecheck`
 - `pnpm --filter @bigroom/web build`
+
+
+## Local setup troubleshooting (zip export + native binaries)
+If you download as ZIP and hit native/binary errors (Prisma/esbuild/next), run:
+
+```bash
+pnpm install
+pnpm approve-builds
+pnpm rebuild
+pnpm --filter @bigroom/web exec prisma generate --schema ../../prisma/schema.prisma
+pnpm dev
+```
+
+Notes:
+- This repo expects pnpm from `packageManager` in root `package.json`.
+- `reports/feedback/` is runtime output and is git-ignored.
