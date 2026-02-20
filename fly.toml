@@ -2,7 +2,7 @@ app = "bridge-wild-meadow-5085"
 primary_region = "ord"
 
 [build]
-  dockerfile = "ws/Dockerfile"
+  dockerfile = "apps/ws/Dockerfile"
 
 [http_service]
   internal_port = 4001
