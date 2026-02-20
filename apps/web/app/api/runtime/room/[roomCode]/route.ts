@@ -19,7 +19,6 @@ export async function GET(_req: Request, { params }: { params: { roomCode: strin
   const roomData = roomRes && roomRes.ok ? await roomRes.json() as { ok?: boolean; room?: any } : { ok: false, room: null };
   const authData = authRes && authRes.ok ? await authRes.json() as { ok?: boolean } : { ok: false };
 
-  const roomNotFound = roomRes?.status === 404;
   const connected = Boolean(roomData.ok && roomData.room);
   const room = roomData.room || { roomCode: params.roomCode };
   const activeSegment = (room.currentSegment || "TIP_OFF") as RuntimeRoomState["segment"]["active"];
@@ -38,16 +37,6 @@ export async function GET(_req: Request, { params }: { params: { roomCode: strin
       broadcast: { score: Number(room.broadcastScore || 0), tier: room.broadcastRating || "BRONZE" },
       announcer: { quietMode: Boolean(room.announcerQuietMode), lastTier: room.announcerLastCallouts?.[room.announcerLastCallouts.length - 1]?.tier || "LOW" },
       minigames: { emojiBudget: { max: 120, active: Number(room.emojiPerSecond?.count || 0) } },
-      stage: {
-        mode: room.stageMode || "LOBBY",
-        transitionMs: Number(room.stageLayout?.transitionMs || 600),
-        freezeTransitions: Boolean(room.stageLayout?.freezeTransitions),
-        crowdMeterVisible: Boolean(room.stageLayout?.crowdMeterVisible),
-        momentumBorder: Boolean(room.stageLayout?.momentumBorder),
-        trimUi: Boolean(room.stageLayout?.trimUi),
-        featureTile: Boolean(room.stageLayout?.featureTile),
-        activeSpeakerWeight: Number(room.stageLayout?.activeSpeakerWeight || 1)
-      },
       realtime: { status: "ONLINE", lastSeenAt: Date.now() }
     }
     : fallbackRuntime;
@@ -57,8 +46,8 @@ export async function GET(_req: Request, { params }: { params: { roomCode: strin
     room,
     authOk: Boolean(authData.ok),
     runtime,
-    errorCode: connected ? null : roomNotFound ? ErrorCode.ROOM_NOT_FOUND : ErrorCode.NODE_UNAVAILABLE
+    errorCode: connected ? null : ErrorCode.NODE_UNAVAILABLE
   };
 
-  return NextResponse.json(response, { status: connected ? 200 : roomNotFound ? 404 : 503 });
+  return NextResponse.json(response, { status: connected ? 200 : 503 });
 }

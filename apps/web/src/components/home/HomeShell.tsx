@@ -55,7 +55,7 @@ export function HomeShell() {
 
         <div className={styles.stack}>
           <Link href="/room/new"><EzButton variant="primary" styleKind={home?.buttonStyle || "proFrame"} className="w-full">{labels.start}</EzButton></Link>
-          <Link href="/join"><EzButton variant="primary" styleKind={home?.buttonStyle || "proFrame"} className="w-full">{labels.pull}</EzButton></Link>
+          <Link href="/join/DEMO42"><EzButton variant="primary" styleKind={home?.buttonStyle || "proFrame"} className="w-full">{labels.pull}</EzButton></Link>
           <Link href="/help/obs"><EzButton variant="primary" styleKind={home?.buttonStyle || "proFrame"} className="w-full">{labels.obs}</EzButton></Link>
         </div>
 

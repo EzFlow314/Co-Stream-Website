@@ -1,9 +1,6 @@
 import cors from "cors";
 import express from "express";
 import { createServer } from "http";
-import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
-import { dirname, resolve } from "node:path";
-import { fileURLToPath } from "node:url";
 import { WebSocket, WebSocketServer } from "ws";
 import {
   GAME_EVENT_WEIGHTS,
@@ -19,7 +16,7 @@ import {
   type StandardGameEvent,
   type WsEnvelope
 } from "@bigroom/shared";
-import { ErrorCode, computeStageLayout, runtimeSegmentTheme, type RoomLifecycle, type StageLayout, type StageMode } from "@ezplay/contracts";
+import { ErrorCode, runtimeSegmentTheme, type RoomLifecycle } from "@ezplay/contracts";
 import { InMemoryRoomRegistry } from "./room-registry";
 import { resolveRuntimeConfig } from "./config";
 
@@ -147,24 +144,6 @@ type RoomState = {
   highlightCountsByType: Record<string, number>;
   viewerInteractionUnique: Set<string>;
   viewerInteractionTotal: number;
-  stageMode: StageMode;
-  stageLayout: StageLayout;
-  stageContext: {
-    screenShareActive: boolean;
-    activeSpeakerIntensity: number;
-    eventDensity: number;
-    closenessOfMatch: number;
-    momentumScore: number;
-    wsHealthy: boolean;
-    tileStallCount: number;
-  };
-  stageDirector: {
-    auto: boolean;
-    lockMode: StageMode | null;
-    forceFeatureParticipantId: string | null;
-    disableAutoTransitions: boolean;
-    pinnedParticipants: string[];
-  };
 };
 
 const app = express();
@@ -190,20 +169,6 @@ const NODE_ID = String(process.env.NODE_ID || "A").toUpperCase();
 const ROUTER_NODE_IDS = String(process.env.ROUTER_NODE_IDS || "A,B").split(",").map((x) => x.trim().toUpperCase()).filter(Boolean);
 const maintenanceWindow: { enabled: boolean; state: MaintState; message: string; startsAt?: number; endsAt?: number } = { enabled: false, state: "ACTIVE", message: "Maintenance mode" };
 const safeMode = { enabled: false, reason: "" };
-
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = dirname(__filename);
-const roadmapFile = resolve(__dirname, "../data/roadmap.json");
-type RoadmapSuggestion = { id: string; title: string; description: string; tags: string[]; status: "OPEN" | "IN_REVIEW" | "PLANNED" | "SHIPPED" | "REJECTED"; monthKey: string; score: number; upvotes: number; downvotes: number };
-const roadmapStore: Record<string, RoadmapSuggestion[]> = (() => {
-  try { return JSON.parse(readFileSync(roadmapFile, "utf8")); } catch { return {}; }
-})();
-const roadmapVoteLimiter = new Map<string, number>();
-
-function saveRoadmap() {
-  mkdirSync(dirname(roadmapFile), { recursive: true });
-  writeFileSync(roadmapFile, JSON.stringify(roadmapStore, null, 2), "utf8");
-}
 
 function assertRoomNodeMatch(req: express.Request, res: express.Response, next: express.NextFunction) {
   const hintedNode = String(req.header("x-room-node") || "").toUpperCase();
@@ -330,108 +295,17 @@ function createRoomState(roomCode = makeRoomCode()): RoomState {
     swingCount: 0,
     highlightCountsByType: {},
     viewerInteractionUnique: new Set(),
-    viewerInteractionTotal: 0,
-    stageMode: "LOBBY",
-    stageLayout: computeStageLayout({
-      segment: "TIP_OFF",
-      momentumScore: 0,
-      screenShareActive: false,
-      activeSpeakerIntensity: 0,
-      eventDensity: 0,
-      closenessOfMatch: 0.5,
-      safemode: false,
-      wsHealthy: true,
-      tileStallCount: 0
-    }),
-    stageContext: {
-      screenShareActive: false,
-      activeSpeakerIntensity: 0,
-      eventDensity: 0,
-      closenessOfMatch: 0.5,
-      momentumScore: 0,
-      wsHealthy: true,
-      tileStallCount: 0
-    },
-    stageDirector: {
-      auto: true,
-      lockMode: null,
-      forceFeatureParticipantId: null,
-      disableAutoTransitions: false,
-      pinnedParticipants: []
-    }
+    viewerInteractionTotal: 0
   };
 }
 
-function normalizeRoomCode(input: string) {
-  return String(input || "").trim().toUpperCase();
+function getRoomOrCreate(code: string) {
+  const existing = roomRegistry.get(code);
+  if (existing) return existing;
+  const created = roomRegistry.create(code, createRoomState);
+  if (!created.ok) throw new Error("ROOM_CAP_REACHED");
+  return created.room;
 }
-
-function getRoom(code: string) {
-  return roomRegistry.get(normalizeRoomCode(code));
-}
-
-function requireRoom(res: express.Response, code: string) {
-  const room = getRoom(code);
-  if (!room) {
-    res.status(404).json({ ok: false, code: ErrorCode.ROOM_NOT_FOUND, message: "Room not found. Ask host to create it first." });
-    return null;
-  }
-  return room;
-}
-
-function createRoom(code?: string) {
-  const roomCode = normalizeRoomCode(code || makeRoomCode());
-  const created = roomRegistry.create(roomCode, createRoomState);
-  if (!created.ok) return { ok: false as const, code: ErrorCode.ROOM_CAP_REACHED };
-  return { ok: true as const, room: created.room };
-}
-function clamp01(value: number) {
-  return Math.max(0, Math.min(1, Number.isFinite(value) ? value : 0));
-}
-
-function computeCloseness(room: RoomState) {
-  const diff = Math.abs(room.scoreA.scoreTotal - room.scoreB.scoreTotal);
-  return clamp01(1 - diff / 8);
-}
-
-function evaluateStage(room: RoomState, wsHealthy: boolean, tileStallCount: number) {
-  const eventDensity = clamp01(room.telemetryEventsLast15s.length / 18);
-  const momentumScore = clamp01(Math.max(Math.abs(room.telemetryMomentum.lastDelta), Math.abs(room.telemetryMomentum.displayA - room.telemetryMomentum.displayB) / 10));
-  const activeSpeakerIntensity = clamp01(room.audioFocusParticipantId && room.audioFocusParticipantId !== "host" ? 0.72 : 0.35);
-  const screenShareActive = room.watchTogetherMode === "STAGE" || Boolean(room.stageDirector.forceFeatureParticipantId);
-  const closenessOfMatch = computeCloseness(room);
-
-  const stageLayout = computeStageLayout({
-    segment: room.currentSegment,
-    momentumScore,
-    screenShareActive,
-    activeSpeakerIntensity,
-    eventDensity,
-    closenessOfMatch,
-    safemode: safeMode.enabled,
-    wsHealthy,
-    tileStallCount,
-    directorLockMode: room.stageDirector.auto ? null : room.stageDirector.lockMode,
-    forceFeature: Boolean(room.stageDirector.forceFeatureParticipantId)
-  });
-
-  room.stageContext = {
-    screenShareActive,
-    activeSpeakerIntensity,
-    eventDensity,
-    closenessOfMatch,
-    momentumScore,
-    wsHealthy,
-    tileStallCount
-  };
-
-  if (room.stageMode !== stageLayout.mode) {
-    pushAutomation(room, "stage", `${room.stageMode} -> ${stageLayout.mode}`);
-  }
-  room.stageMode = stageLayout.mode;
-  room.stageLayout = stageLayout;
-}
-
 function broadcast<T>(roomCode: string, envelope: WsEnvelope<T> | Record<string, unknown>) {
   const sockets = roomSockets.get(roomCode); if (!sockets) return;
   const msg = JSON.stringify(envelope);
@@ -852,7 +726,8 @@ app.post("/admin/release-plans", (req, res) => {
 app.post("/rooms", assertRoomNodeMatch, (req, res) => {
   if (maintenanceWindow.state !== "ACTIVE") return res.status(503).json({ ok: false, code: maintenanceWindow.state === "DRAINING" ? ErrorCode.DRAINING : ErrorCode.MAINTENANCE, message: "EzPlay is in maintenance. Please retry shortly." });
   const body = req.body && typeof req.body === "object" ? req.body : {};
-  const created = createRoom(typeof (body as any).roomCode === "string" ? (body as any).roomCode : undefined);
+  const roomCode = typeof (body as any).roomCode === "string" ? (body as any).roomCode : makeRoomCode();
+  const created = roomRegistry.create(roomCode, createRoomState);
   if (!created.ok) return res.status(503).json({ ok: false, code: ErrorCode.ROOM_CAP_REACHED, message: "Room capacity reached. Retry shortly." });
   res.json({ ok: true, room: created.room });
 });
@@ -886,51 +761,12 @@ app.get("/rooms", (_req, res) => {
 });
 
 app.get("/rooms/:roomCode", assertRoomNodeMatch, (req, res) => {
-  const room = requireRoom(res, String(req.params.roomCode || ""));
-  if (!room) return;
+  const room = getRoomOrCreate(String(req.params.roomCode || ""));
   res.json({ ok: true, room: { ...room, viewers: room.viewers.size, viewerCount: room.viewers.size, viewerCap: 200, protectionMode, safemode: safeMode.enabled } });
 });
-app.post("/rooms/:roomCode/stage-override", (req, res) => {
-  const room = requireRoom(res, req.params.roomCode);
-  if (!room) return;
-  const modeRaw = String(req.body.mode || "").toUpperCase();
-  const mode = (["LOBBY", "ACTIVE", "FEATURE", "CLUTCH", "RECOVERY"] as const).includes(modeRaw as StageMode) ? modeRaw as StageMode : null;
-  room.stageDirector.auto = false;
-  room.stageDirector.lockMode = mode;
-  room.stageDirector.forceFeatureParticipantId = typeof req.body.forceFeatureParticipantId === "string" ? sanitizeText(req.body.forceFeatureParticipantId) : null;
-  room.stageDirector.disableAutoTransitions = Boolean(req.body.disableAutoTransitions);
-  evaluateStage(room, true, 0);
-  res.json({ ok: true, stageDirector: room.stageDirector, stageMode: room.stageMode, stageLayout: room.stageLayout });
-});
-
-app.post("/rooms/:roomCode/stage-auto", (req, res) => {
-  const room = requireRoom(res, req.params.roomCode);
-  if (!room) return;
-  room.stageDirector.auto = true;
-  room.stageDirector.lockMode = null;
-  room.stageDirector.forceFeatureParticipantId = null;
-  room.stageDirector.disableAutoTransitions = false;
-  room.stageDirector.pinnedParticipants = [];
-  evaluateStage(room, true, 0);
-  res.json({ ok: true, stageDirector: room.stageDirector, stageMode: room.stageMode, stageLayout: room.stageLayout });
-});
-
-app.post("/rooms/:roomCode/stage-pin", (req, res) => {
-  const room = requireRoom(res, req.params.roomCode);
-  if (!room) return;
-  const list = Array.isArray(req.body.pinnedParticipants) ? req.body.pinnedParticipants.map((x: unknown) => sanitizeText(String(x))).filter(Boolean).slice(0, 6) : [];
-  room.stageDirector.pinnedParticipants = list;
-  res.json({ ok: true, pinnedParticipants: room.stageDirector.pinnedParticipants });
-});
-
-app.get("/rooms/:roomCode/moments", (req, res) => {
-  const room = requireRoom(res, req.params.roomCode);
-  if (!room) return;
-  res.json({ ok: true, moments: room.moments });
-});
+app.get("/rooms/:roomCode/moments", (req, res) => res.json({ ok: true, moments: getRoomOrCreate(req.params.roomCode).moments }));
 app.get("/rooms/:roomCode/recap", (req, res) => {
-  const room = requireRoom(res, req.params.roomCode);
-  if (!room) return;
+  const room = getRoomOrCreate(req.params.roomCode);
   const mvp = Object.entries(room.votes).sort((a, b) => b[1] - a[1])[0]?.[0] || "host";
   const hottest = Object.entries(room.heat).sort((a, b) => b[1] - a[1])[0]?.[0] || "host";
   const bestMoment = room.moments.filter((m) => m.intensity).sort((a, b) => (b.intensity || 0) - (a.intensity || 0))[0] || null;
@@ -940,8 +776,7 @@ app.get("/rooms/:roomCode/recap", (req, res) => {
 });
 
 app.get("/rooms/:roomCode/moment-vault", (req, res) => {
-  const room = requireRoom(res, req.params.roomCode);
-  if (!room) return;
+  const room = getRoomOrCreate(req.params.roomCode);
   const ranked = [...room.moments].sort((a, b) => (b.intensity || 0) - (a.intensity || 0));
   const payload = {
     topSession: ranked.slice(0, 10),
@@ -953,8 +788,7 @@ app.get("/rooms/:roomCode/moment-vault", (req, res) => {
 });
 
 app.post("/rooms/:roomCode/watch-mode", (req, res) => {
-  const room = requireRoom(res, req.params.roomCode);
-  if (!room) return;
+  const room = getRoomOrCreate(req.params.roomCode);
   const mode = String(req.body.mode || "SYNC") === "STAGE" ? "STAGE" : "SYNC";
   const ageVerified = Boolean(req.body.ageVerified);
   if (room.matureMode && !ageVerified) return res.status(403).json({ ok: false, error: "age verification required" });
@@ -964,15 +798,13 @@ app.post("/rooms/:roomCode/watch-mode", (req, res) => {
 });
 
 app.post("/rooms/:roomCode/mature-mode", (req, res) => {
-  const room = requireRoom(res, req.params.roomCode);
-  if (!room) return;
+  const room = getRoomOrCreate(req.params.roomCode);
   room.matureMode = Boolean(req.body.matureMode);
   res.json({ ok: true, matureMode: room.matureMode });
 });
 
 app.post("/rooms/:roomCode/now-playing", (req, res) => {
-  const room = requireRoom(res, req.params.roomCode);
-  if (!room) return;
+  const room = getRoomOrCreate(req.params.roomCode);
   room.nowPlayingGame = sanitizeText(String(req.body.game || room.nowPlayingGame || ""));
   room.nowPlayingPlatform = (String(req.body.platform || room.nowPlayingPlatform || "TWITCH") as Platform);
   room.vibeProfile = (String(req.body.vibeProfile || room.vibeProfile || "AUTO") as RoomState["vibeProfile"]);
@@ -983,14 +815,12 @@ app.post("/rooms/:roomCode/now-playing", (req, res) => {
 });
 
 app.get("/rooms/:roomCode/automation/setup", (req, res) => {
-  const room = requireRoom(res, req.params.roomCode);
-  if (!room) return;
+  const room = getRoomOrCreate(req.params.roomCode);
   res.json({ ok: true, setup: room.firstTimeSetup, clipProvider: room.clipProvider, defaults: { telemetryMode: true, automationEngine: room.automationEngine, autoLayout: room.autoLayout, momentsLogging: room.momentsLogging, hudMode: room.stats.hudMode, announcerStudio: true, announcerProgram: false, segmentsEngine: room.segmentsEngine, randomMicroSkins: true } });
 });
 
 app.post("/rooms/:roomCode/automation/setup", (req, res) => {
-  const room = requireRoom(res, req.params.roomCode);
-  if (!room) return;
+  const room = getRoomOrCreate(req.params.roomCode);
   room.firstTimeSetup = {
     obsAdded: Boolean(req.body.obsAdded ?? room.firstTimeSetup.obsAdded),
     recordingConfigured: Boolean(req.body.recordingConfigured ?? room.firstTimeSetup.recordingConfigured),
@@ -1003,8 +833,7 @@ app.post("/rooms/:roomCode/automation/setup", (req, res) => {
 });
 
 app.post("/rooms/:roomCode/stats", (req, res) => {
-  const room = requireRoom(res, req.params.roomCode);
-  if (!room) return;
+  const room = getRoomOrCreate(req.params.roomCode);
   room.telemetryStatus = "CONNECTED";
   const participantId = sanitizeText(String(req.body.participantId || "host")) || "host";
   const crew = String(req.body.crew || "A") === "B" ? "B" : "A";
@@ -1054,8 +883,7 @@ app.post("/rooms/:roomCode/stats", (req, res) => {
 });
 
 app.post("/rooms/:roomCode/hud-mode", (req, res) => {
-  const room = requireRoom(res, req.params.roomCode);
-  if (!room) return;
+  const room = getRoomOrCreate(req.params.roomCode);
   const mode = ["MINIMAL", "FULL", "SPORTSCAST"].includes(String(req.body.mode)) ? String(req.body.mode) : "MINIMAL";
   room.stats.hudMode = mode as RoomStatsState["hudMode"];
   broadcast(room.roomCode, { type: "HUD_MODE_SET", roomCode: room.roomCode, payload: { mode: room.stats.hudMode }, ts: Date.now() });
@@ -1063,8 +891,7 @@ app.post("/rooms/:roomCode/hud-mode", (req, res) => {
 });
 
 app.post("/rooms/:roomCode/export-highlight-pack", (req, res) => {
-  const room = requireRoom(res, req.params.roomCode);
-  if (!room) return;
+  const room = getRoomOrCreate(req.params.roomCode);
   const payload = {
     timeline: room.moments,
     match: { crewA: room.crewA, crewB: room.crewB, scoreA: room.scoreA, scoreB: room.scoreB, matchStatus: room.matchStatus },
@@ -1075,39 +902,28 @@ app.post("/rooms/:roomCode/export-highlight-pack", (req, res) => {
 });
 
 app.post("/rooms/:roomCode/replay-pip", (req, res) => {
-  const room = requireRoom(res, req.params.roomCode);
-  if (!room) return;
+  const room = getRoomOrCreate(req.params.roomCode);
   broadcast(room.roomCode, { type: "REPLAY_PIP_TRIGGER", roomCode: room.roomCode, payload: { participantId: req.body.participantId || "host", durationMs: Number(req.body.durationMs || 8000), stamp: "INSTANT REPLAY" }, ts: Date.now() });
   res.json({ ok: true });
 });
 
-app.post("/rooms/:roomCode/reconnect-all", (req, res) => {
-  const room = requireRoom(res, req.params.roomCode);
-  if (!room) return;
-  broadcast(room.roomCode, { type: "RECONNECT_ALL", roomCode: room.roomCode, payload: { at: Date.now() }, ts: Date.now() });
-  res.json({ ok: true });
-});
+app.post("/rooms/:roomCode/reconnect-all", (req, res) => { const room = getRoomOrCreate(req.params.roomCode); broadcast(room.roomCode, { type: "RECONNECT_ALL", roomCode: room.roomCode, payload: { at: Date.now() }, ts: Date.now() }); res.json({ ok: true }); });
 app.post("/rooms/:roomCode/regenerate-vdo/:participantId", (req, res) => {
-  const room = requireRoom(res, req.params.roomCode);
-  if (!room) return;
+  const room = getRoomOrCreate(req.params.roomCode);
   const p = room.participants.find((x) => x.id === req.params.participantId); if (!p) return res.status(404).json({ ok: false });
   p.vdoId = `${p.id}_${makeToken(6)}`;
   broadcast(room.roomCode, { type: "PARTICIPANT_VDO_REGENERATED", roomCode: room.roomCode, payload: { participantId: p.id, vdoId: p.vdoId }, ts: Date.now() });
   res.json({ ok: true, participant: p });
 });
 app.post("/rooms/:roomCode/audio-focus", (req, res) => {
-  const room = requireRoom(res, req.params.roomCode);
-  if (!room) return;
-  const participantId = String(req.body.participantId || "host");
+  const room = getRoomOrCreate(req.params.roomCode); const participantId = String(req.body.participantId || "host");
   if (!room.participants.some((p) => p.id === participantId)) return res.status(400).json({ ok: false });
   room.audioFocusParticipantId = participantId; room.autoAudioFocus = Boolean(req.body.autoAudioFocus);
   broadcast(room.roomCode, { type: "AUDIO_FOCUS_SET", roomCode: room.roomCode, payload: { participantId, autoAudioFocus: room.autoAudioFocus }, ts: Date.now() });
   res.json({ ok: true, participantId, autoAudioFocus: room.autoAudioFocus });
 });
 app.post("/rooms/:roomCode/profile/:participantId", (req, res) => {
-  const room = requireRoom(res, req.params.roomCode);
-  if (!room) return;
-  const p = room.participants.find((x) => x.id === req.params.participantId);
+  const room = getRoomOrCreate(req.params.roomCode); const p = room.participants.find((x) => x.id === req.params.participantId);
   if (!p) return res.status(404).json({ ok: false });
   const profile = String(req.body.profile || "TACTICAL") as StreamProfile;
   p.profile = profile;
@@ -1115,27 +931,18 @@ app.post("/rooms/:roomCode/profile/:participantId", (req, res) => {
   res.json({ ok: true, participant: p });
 });
 app.post("/rooms/:roomCode/replay-highlight", (req, res) => {
-  const room = requireRoom(res, req.params.roomCode);
-  if (!room) return;
+  const room = getRoomOrCreate(req.params.roomCode);
   broadcast(room.roomCode, { type: "REPLAY_HIGHLIGHT", roomCode: room.roomCode, payload: { momentId: req.body.momentId, durationMs: 6000 }, ts: Date.now() });
   res.json({ ok: true });
 });
 app.post("/rooms/:roomCode/recap-overlay", (req, res) => {
-  const room = requireRoom(res, req.params.roomCode);
-  if (!room) return;
+  const room = getRoomOrCreate(req.params.roomCode);
   broadcast(room.roomCode, { type: "RECAP_OVERLAY", roomCode: room.roomCode, payload: { durationMs: 15000 }, ts: Date.now() });
   res.json({ ok: true });
 });
 
 app.post("/rooms/:roomCode/end-match", (req, res) => {
-  const room = requireRoom(res, req.params.roomCode);
-  if (!room) return;
-  room.matchStatus = "ENDED";
-  room.stageDirector.auto = true;
-  room.stageDirector.lockMode = null;
-  room.stageDirector.forceFeatureParticipantId = null;
-  room.stageDirector.disableAutoTransitions = false;
-  room.stageDirector.pinnedParticipants = []; room.battleMode = false; room.lifecycle = "ENDED";
+  const room = getRoomOrCreate(req.params.roomCode); room.matchStatus = "ENDED"; room.battleMode = false; room.lifecycle = "ENDED";
   const season = activeSeason(); const winner = room.scoreA.scoreTotal >= room.scoreB.scoreTotal ? room.crewA : room.crewB; const loser = winner === room.crewA ? room.crewB : room.crewA;
   for (const [crew, won] of [[winner, true], [loser, false]] as const) {
     let row = season.leaderboard.find((r) => r.crew === crew);
@@ -1194,22 +1001,17 @@ app.post("/rooms/:roomCode/end-match", (req, res) => {
 });
 
 app.get("/program-auth/:roomCode", (req, res) => {
-  const room = requireRoom(res, req.params.roomCode);
-  if (!room) return;
-  const token = String(req.query.token || "");
+  const room = getRoomOrCreate(req.params.roomCode); const token = String(req.query.token || "");
   res.json({ ok: token.length > 0 && token === room.programToken });
 });
 app.post("/rooms/:roomCode/discord-invite", (req, res) => {
-  const room = requireRoom(res, req.params.roomCode);
-  if (!room) return;
+  const room = getRoomOrCreate(req.params.roomCode);
   room.discordInviteUrl = sanitizeText(String(req.body.discordInviteUrl || "")).slice(0, 200);
   broadcast(req.params.roomCode, { type: "DISCORD_INVITE_SET", roomCode: req.params.roomCode, payload: { discordInviteUrl: room.discordInviteUrl }, ts: Date.now() });
   res.json({ ok: true, discordInviteUrl: room.discordInviteUrl });
 });
 app.post("/rooms/:roomCode/battle-mode", (req, res) => {
-  const room = requireRoom(res, req.params.roomCode);
-  if (!room) return;
-  if (typeof req.body.battleMode !== "boolean") return res.status(400).json({ ok: false });
+  const room = getRoomOrCreate(req.params.roomCode); if (typeof req.body.battleMode !== "boolean") return res.status(400).json({ ok: false });
   room.battleMode = req.body.battleMode; room.matchStatus = room.battleMode ? "LIVE" : "PENDING"; room.matchId = room.battleMode ? room.matchId || `match_${makeToken(8)}` : undefined;
   room.lifecycle = room.battleMode ? "ACTIVE" : "CREATED";
   room.matchStartedAt = room.battleMode ? Date.now() : undefined;
@@ -1223,42 +1025,6 @@ app.post("/rooms/:roomCode/battle-mode", (req, res) => {
   broadcast(req.params.roomCode, { type: "BATTLE_MODE_SET", roomCode: req.params.roomCode, payload: { battleMode: room.battleMode, matchId: room.matchId, crewA: room.crewA, crewB: room.crewB, matchStatus: room.matchStatus }, ts: Date.now() });
   if (room.matchStatus === "LIVE") broadcast(req.params.roomCode, { type: "MATCH_POSTER_INTRO", roomCode: req.params.roomCode, payload: { crewA: room.crewA, crewB: room.crewB, season: activeSeason().name }, ts: Date.now() });
   res.json({ ok: true, battleMode: room.battleMode, matchId: room.matchId });
-});
-
-app.get("/roadmap/:monthKey", (req, res) => {
-  const monthKey = String(req.params.monthKey || "");
-  res.json({ ok: true, monthKey, items: roadmapStore[monthKey] || [] });
-});
-
-app.post("/roadmap/:monthKey", (req, res) => {
-  const monthKey = String(req.params.monthKey || "");
-  const title = sanitizeText(String(req.body.title || "")).trim();
-  const description = sanitizeText(String(req.body.description || "")).trim();
-  const tags = Array.isArray(req.body.tags) ? req.body.tags.map((x: unknown) => sanitizeText(String(x))).filter(Boolean) : [];
-  if (!title || !description) return res.status(400).json({ ok: false, code: ErrorCode.INVALID_REQUEST, message: "title and description required" });
-  const item: RoadmapSuggestion = { id: `rm_${makeToken(8)}`, title, description, tags, status: "OPEN", monthKey, score: 0, upvotes: 0, downvotes: 0 };
-  roadmapStore[monthKey] = [item, ...(roadmapStore[monthKey] || [])].slice(0, 500);
-  saveRoadmap();
-  res.json({ ok: true, item });
-});
-
-app.post("/roadmap/:monthKey/vote", (req, res) => {
-  const monthKey = String(req.params.monthKey || "");
-  const id = String(req.body.id || "");
-  const value = Number(req.body.value) === -1 ? -1 : 1;
-  const voterKey = `${String(req.headers["x-forwarded-for"] || req.socket.remoteAddress || "unknown")}:${monthKey}:${id}`;
-  const lastVoteAt = roadmapVoteLimiter.get(voterKey) || 0;
-  if (Date.now() - lastVoteAt < 2000) return res.status(429).json({ ok: false, code: ErrorCode.RATE_LIMITED, retryAfterMs: 1500 });
-  roadmapVoteLimiter.set(voterKey, Date.now());
-  const list = roadmapStore[monthKey] || [];
-  const idx = list.findIndex((x) => x.id === id);
-  if (idx < 0) return res.status(404).json({ ok: false, code: ErrorCode.ROOM_NOT_FOUND, message: "Suggestion not found" });
-  const current = list[idx]!;
-  const item = { ...current, upvotes: current.upvotes + (value === 1 ? 1 : 0), downvotes: current.downvotes + (value === -1 ? 1 : 0), score: current.score + value };
-  list[idx] = item;
-  roadmapStore[monthKey] = list;
-  saveRoadmap();
-  res.json({ ok: true, item });
 });
 app.post("/discord/webhook/:roomCode", async (req, res) => {
   const roomCode = req.params.roomCode; const last = webhookRate.get(roomCode) ?? 0;
@@ -1372,8 +1138,7 @@ function ingestTelemetryEvent(room: RoomState, input: { participantId: string; t
 }
 
 app.post("/event/:roomCode", (req, res) => {
-  const room = requireRoom(res, req.params.roomCode);
-  if (!room) return;
+  const room = getRoomOrCreate(req.params.roomCode);
   if (!req.body || typeof req.body !== "object") return res.status(400).json({ ok: false });
   const body = req.body as Partial<StandardGameEvent> & { statDelta?: Record<string, number>; matchId?: string; participantId?: string; clientTs?: number };
   const participantId = String(body.participantId || body.streamerVdoId || "host");
@@ -1461,10 +1226,6 @@ setInterval(() => {
         }
       }
 
-      const wsHealthy = roomSockets.get(room.roomCode)?.size ? true : true;
-      const tileStallCount = 0;
-      evaluateStage(room, wsHealthy, tileStallCount);
-
       const statePayload = {
         maintenance: { state: room.maintenanceState, banner: maintenanceWindow.enabled ? maintenanceWindow : null },
         segment: { active: room.currentSegment, startedAt: room.segmentStartedAt, theme: runtimeSegmentTheme(room.currentSegment as any) },
@@ -1478,13 +1239,7 @@ setInterval(() => {
         announcer: { quietMode: room.announcerQuietMode },
         minigames: { emojiBudget: { max: 120, active: room.emojiPerSecond.count } },
         protection: { mode: protectionMode },
-        safemode: { enabled: safeMode.enabled, reason: safeMode.reason || null },
-        stage: {
-          mode: room.stageMode,
-          layout: room.stageLayout,
-          context: room.stageContext,
-          director: room.stageDirector
-        }
+        safemode: { enabled: safeMode.enabled, reason: safeMode.reason || null }
       };
 
       const gateAt = roomStateBroadcastGate.get(room.roomCode) || 0;
@@ -1543,7 +1298,7 @@ setInterval(() => {
 
 wss.on("connection", (socket, req) => {
   const url = new URL(req.url || "/", "http://localhost");
-  const roomCode = normalizeRoomCode(url.searchParams.get("roomCode") || "");
+  const roomCode = url.searchParams.get("roomCode");
   const role = (url.searchParams.get("role") || "host").toLowerCase();
   if (!roomCode) return socket.close();
   if (maintenanceWindow.state === "MAINTENANCE") {
@@ -1551,11 +1306,7 @@ wss.on("connection", (socket, req) => {
     return socket.close();
   }
 
-  const room = getRoom(roomCode);
-  if (!room) {
-    socket.send(JSON.stringify({ op: "error", ok: false, roomCode, error: { code: ErrorCode.ROOM_NOT_FOUND, message: "Room not found. Ask host to create it first." }, serverTs: Date.now() }));
-    return socket.close();
-  }
+  const room = getRoomOrCreate(roomCode);
   if (!roomSockets.has(roomCode)) roomSockets.set(roomCode, new Set());
   roomSockets.get(roomCode)!.add(socket as WebSocket);
 
