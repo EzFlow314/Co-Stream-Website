@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 
 type Suggestion = { id: string; title: string; description: string; tags: string[]; status: "OPEN" | "IN_REVIEW" | "PLANNED" | "SHIPPED" | "REJECTED"; monthKey: string; score: number; upvotes: number; downvotes: number };
 
@@ -11,13 +11,21 @@ export default function RoadmapPage() {
   const [description, setDescription] = useState("");
   const [tags, setTags] = useState("automation,ui");
   const [items, setItems] = useState<Suggestion[]>([]);
+  const [status, setStatus] = useState("");
+
+  useEffect(() => {
+    fetch(`/api/roadmap/${monthKey}`, { cache: "no-store" })
+      .then((r) => r.json())
+      .then((d) => setItems(Array.isArray(d.items) ? d.items : []))
+      .catch(() => setStatus("Roadmap service offline"));
+  }, []);
 
   const winner = useMemo(() => [...items].sort((a, b) => b.score - a.score || b.upvotes - a.upvotes)[0], [items]);
 
-  function submit() {
+  async function submit() {
     if (!title.trim() || !description.trim()) return;
-    const next: Suggestion = {
-      id: crypto.randomUUID(),
+    const optimistic: Suggestion = {
+      id: `pending_${Math.random().toString(16).slice(2)}`,
       title: title.trim(),
       description: description.trim(),
       tags: tags.split(",").map((x) => x.trim()).filter(Boolean),
@@ -27,19 +35,36 @@ export default function RoadmapPage() {
       upvotes: 0,
       downvotes: 0
     };
-    setItems((x) => [next, ...x]);
+    setItems((x) => [optimistic, ...x]);
     setTitle("");
     setDescription("");
+
+    const res = await fetch(`/api/roadmap/${monthKey}`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ title: optimistic.title, description: optimistic.description, tags: optimistic.tags })
+    });
+    const data = await res.json().catch(() => ({}));
+    if (data?.item) setItems((x) => x.map((s) => s.id === optimistic.id ? data.item : s));
+    else setStatus("Failed to submit suggestion");
   }
 
-  function vote(id: string, value: 1 | -1) {
+  async function vote(id: string, value: 1 | -1) {
     setItems((list) => list.map((s) => s.id === id ? { ...s, upvotes: s.upvotes + (value === 1 ? 1 : 0), downvotes: s.downvotes + (value === -1 ? 1 : 0), score: s.score + value } : s));
+    const res = await fetch(`/api/roadmap/${monthKey}/vote`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ id, value })
+    });
+    const data = await res.json().catch(() => ({}));
+    if (data?.item) setItems((list) => list.map((s) => s.id === id ? data.item : s));
   }
 
   return (
     <main className="space-y-4">
       <h1 className="text-3xl font-black">Roadmap Voting</h1>
       <p className="text-sm text-white/70">Monthly window: {monthKey}. Streamer accounts vote; public can view.</p>
+      {status && <p className="rounded border border-amber-300/40 bg-amber-300/10 p-2 text-sm">{status}</p>}
       {winner && <p className="rounded border border-cyan-300/40 bg-cyan-300/10 p-2 text-sm">Winner of the Month (preview): {winner.title}</p>}
 
       <section className="card space-y-2">
