@@ -38,6 +38,16 @@ export async function GET(_req: Request, { params }: { params: { roomCode: strin
       broadcast: { score: Number(room.broadcastScore || 0), tier: room.broadcastRating || "BRONZE" },
       announcer: { quietMode: Boolean(room.announcerQuietMode), lastTier: room.announcerLastCallouts?.[room.announcerLastCallouts.length - 1]?.tier || "LOW" },
       minigames: { emojiBudget: { max: 120, active: Number(room.emojiPerSecond?.count || 0) } },
+      stage: {
+        mode: room.stageMode || "LOBBY",
+        transitionMs: Number(room.stageLayout?.transitionMs || 600),
+        freezeTransitions: Boolean(room.stageLayout?.freezeTransitions),
+        crowdMeterVisible: Boolean(room.stageLayout?.crowdMeterVisible),
+        momentumBorder: Boolean(room.stageLayout?.momentumBorder),
+        trimUi: Boolean(room.stageLayout?.trimUi),
+        featureTile: Boolean(room.stageLayout?.featureTile),
+        activeSpeakerWeight: Number(room.stageLayout?.activeSpeakerWeight || 1)
+      },
       realtime: { status: "ONLINE", lastSeenAt: Date.now() }
     }
     : fallbackRuntime;

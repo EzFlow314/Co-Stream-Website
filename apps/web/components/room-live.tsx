@@ -9,6 +9,7 @@ import { DeviceCheckPanel } from "@/components/device-check-panel";
 type Message = { sender: string; text: string };
 type Score = { scoreHype: number; scoreTelemetry: number; scoreTotal: number };
 type TileStatus = "CONNECTING" | "LIVE" | "STALLED";
+type StageMode = "LOBBY" | "ACTIVE" | "FEATURE" | "CLUTCH" | "RECOVERY";
 
 const SAFE_CHANTS = ["WOW!", "NICE!", "AMAZING!", "CLUTCH!"];
 const STREET_CHANTS = ["OOOOH!", "HE DID WHAT?!", "RUN IT BACK!", "TOO CLEAN!"];
@@ -45,6 +46,11 @@ export function RoomLive({ roomCode }: { roomCode: string }) {
   const [telemetryMode, setTelemetryMode] = useState(true);
   const [hudMode, setHudMode] = useState("MINIMAL");
   const [segment, setSegment] = useState("TIP_OFF");
+  const [stageMode, setStageMode] = useState<StageMode>("LOBBY");
+  const [stageAuto, setStageAuto] = useState(true);
+  const [featureParticipantId, setFeatureParticipantId] = useState("host");
+  const [disableAutoTransitions, setDisableAutoTransitions] = useState(false);
+  const [pinnedInput, setPinnedInput] = useState("host");
   const [telemetryStatus, setTelemetryStatus] = useState("WAITING");
   const [broadcastRating, setBroadcastRating] = useState("BRONZE");
   const [broadcastScore, setBroadcastScore] = useState(0);
@@ -81,6 +87,12 @@ export function RoomLive({ roomCode }: { roomCode: string }) {
         setBroadcastScore(envelopeData.broadcast?.score || 0);
         setBroadcastRating(envelopeData.broadcast?.tier || "BRONZE");
         if (envelopeData.maintenance?.state && envelopeData.maintenance.state !== "ACTIVE") setWsStatus("OFFLINE");
+        if (envelopeData.stage?.mode) setStageMode(envelopeData.stage.mode);
+        if (envelopeData.stage?.director) {
+          setStageAuto(Boolean(envelopeData.stage.director.auto));
+          setDisableAutoTransitions(Boolean(envelopeData.stage.director.disableAutoTransitions));
+          setFeatureParticipantId(envelopeData.stage.director.forceFeatureParticipantId || "host");
+        }
       }
       if (msg.type === "WELCOME" && msg.payload?.room) {
         setAudioFocus(msg.payload.room.audioFocusParticipantId || "host");
@@ -263,6 +275,34 @@ export function RoomLive({ roomCode }: { roomCode: string }) {
     });
   }
 
+
+  async function setStageOverride(mode: StageMode) {
+    const response = await fetch(`${process.env.NEXT_PUBLIC_WS_HTTP_URL || "http://localhost:4001"}/rooms/${roomCode}/stage-override`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ mode, forceFeatureParticipantId: mode === "FEATURE" ? featureParticipantId : null, disableAutoTransitions })
+    });
+    const json = await response.json().catch(() => ({}));
+    if (json.stageMode) setStageMode(json.stageMode);
+    setStageAuto(false);
+  }
+
+  async function setStageAutoMode() {
+    const response = await fetch(`${process.env.NEXT_PUBLIC_WS_HTTP_URL || "http://localhost:4001"}/rooms/${roomCode}/stage-auto`, { method: "POST" });
+    const json = await response.json().catch(() => ({}));
+    if (json.stageMode) setStageMode(json.stageMode);
+    setStageAuto(true);
+  }
+
+  async function applyPinnedParticipants() {
+    const pinnedParticipants = pinnedInput.split(",").map((x) => x.trim()).filter(Boolean);
+    await fetch(`${process.env.NEXT_PUBLIC_WS_HTTP_URL || "http://localhost:4001"}/rooms/${roomCode}/stage-pin`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ pinnedParticipants })
+    });
+  }
+
   function sendChat() {
     if (!socket || socket.readyState !== WebSocket.OPEN) return;
     const text = sanitizeText(input);
@@ -279,7 +319,7 @@ export function RoomLive({ roomCode }: { roomCode: string }) {
     <div className="space-y-4">
       <AutomationWizard roomCode={roomCode} />
       <div className="grid gap-6 lg:grid-cols-[2fr_1fr]">
-      <section className="ez-card min-h-64">
+      <section className={`ez-card min-h-64 transition-all ${stageMode === "CLUTCH" ? "ring-2 ring-rose-400/50 scale-[1.01]" : ""} ${stageMode === "RECOVERY" ? "opacity-90" : ""}`}>
         <div className="flex flex-wrap items-center justify-between gap-2">
           <h2 className="text-xl font-black">Program Stage ({roomCode})</h2>
           <span className="rounded border border-white/20 px-2 py-1 text-xs">WS: {wsStatus}</span>
@@ -301,9 +341,9 @@ export function RoomLive({ roomCode }: { roomCode: string }) {
           </div>
         )}
 
-        <div className="mt-4 grid grid-cols-2 gap-4 md:grid-cols-3">
+        <div className={`mt-4 grid gap-4 ${stageMode === "FEATURE" ? "grid-cols-1 md:grid-cols-2" : "grid-cols-2 md:grid-cols-3"}`}>
           {participants.map((id) => (
-            <div key={id} className={`rounded-xl border border-white/20 bg-black/40 p-3 text-center ${spotlightId === id ? "ring-2 ring-cyan-300" : ""}`}>
+            <div key={id} className={`rounded-xl border border-white/20 bg-black/40 p-3 text-center transition-all ${spotlightId === id ? "ring-2 ring-cyan-300" : ""} ${stageMode === "ACTIVE" && spotlightId === id ? "scale-105" : ""} ${stageMode === "FEATURE" && id === featureParticipantId ? "md:col-span-2 ring-2 ring-fuchsia-300/60" : ""}`}>
               <div className="mb-1 flex items-center justify-between text-[10px]">
                 <span>{id}</span>
                 <span className={`rounded px-1 ${tileStatus(id) === "LIVE" ? "bg-emerald-500/30" : tileStatus(id) === "STALLED" ? "bg-red-500/30" : "bg-yellow-500/30"}`}>{tileStatus(id)}</span>
@@ -350,6 +390,26 @@ export function RoomLive({ roomCode }: { roomCode: string }) {
 
       <aside className="space-y-3">
         <DeviceCheckPanel />
+        <section className="ez-card space-y-2">
+          <h3 className="font-black">Dynamic Stage Engine (V12.10)</h3>
+          <p className="text-xs text-white/70">Mode: <span className="font-semibold">{stageMode}</span> · {stageAuto ? "AUTO" : "DIRECTOR OVERRIDE"}</p>
+          <div className="flex flex-wrap gap-2">
+            <button className={`ez-btn ${stageAuto ? "ez-btn-primary" : "ez-btn-muted"}`} onClick={setStageAutoMode}>Auto</button>
+            {(["LOBBY", "ACTIVE", "FEATURE", "CLUTCH", "RECOVERY"] as StageMode[]).map((mode) => (
+              <button key={mode} className={`ez-btn ${!stageAuto && stageMode === mode ? "ez-btn-primary" : "ez-btn-muted"}`} onClick={() => setStageOverride(mode)}>{mode}</button>
+            ))}
+          </div>
+          <label className="text-xs text-white/70">Feature participant</label>
+          <select className="ez-input" value={featureParticipantId} onChange={(e) => setFeatureParticipantId(e.target.value)}>
+            {participants.map((id) => <option key={id} value={id}>{id}</option>)}
+          </select>
+          <label className="flex items-center gap-2 text-sm"><input type="checkbox" checked={disableAutoTransitions} onChange={(e) => setDisableAutoTransitions(e.target.checked)} /> Disable auto transitions</label>
+          <label className="text-xs text-white/70">Pinned participants (comma-separated)</label>
+          <div className="flex gap-2">
+            <input className="ez-input" value={pinnedInput} onChange={(e) => setPinnedInput(e.target.value)} />
+            <button className="ez-btn ez-btn-muted" onClick={applyPinnedParticipants}>Apply Pins</button>
+          </div>
+        </section>
         <section className="ez-card space-y-2">
           <h3 className="font-black">Now Playing + Telemetry</h3>
           <p className="text-xs text-white/70">Status: {telemetryStatus}</p>

@@ -19,7 +19,7 @@ import {
   type StandardGameEvent,
   type WsEnvelope
 } from "@bigroom/shared";
-import { ErrorCode, runtimeSegmentTheme, type RoomLifecycle } from "@ezplay/contracts";
+import { ErrorCode, computeStageLayout, runtimeSegmentTheme, type RoomLifecycle, type StageLayout, type StageMode } from "@ezplay/contracts";
 import { InMemoryRoomRegistry } from "./room-registry";
 import { resolveRuntimeConfig } from "./config";
 
@@ -147,6 +147,24 @@ type RoomState = {
   highlightCountsByType: Record<string, number>;
   viewerInteractionUnique: Set<string>;
   viewerInteractionTotal: number;
+  stageMode: StageMode;
+  stageLayout: StageLayout;
+  stageContext: {
+    screenShareActive: boolean;
+    activeSpeakerIntensity: number;
+    eventDensity: number;
+    closenessOfMatch: number;
+    momentumScore: number;
+    wsHealthy: boolean;
+    tileStallCount: number;
+  };
+  stageDirector: {
+    auto: boolean;
+    lockMode: StageMode | null;
+    forceFeatureParticipantId: string | null;
+    disableAutoTransitions: boolean;
+    pinnedParticipants: string[];
+  };
 };
 
 const app = express();
@@ -312,7 +330,35 @@ function createRoomState(roomCode = makeRoomCode()): RoomState {
     swingCount: 0,
     highlightCountsByType: {},
     viewerInteractionUnique: new Set(),
-    viewerInteractionTotal: 0
+    viewerInteractionTotal: 0,
+    stageMode: "LOBBY",
+    stageLayout: computeStageLayout({
+      segment: "TIP_OFF",
+      momentumScore: 0,
+      screenShareActive: false,
+      activeSpeakerIntensity: 0,
+      eventDensity: 0,
+      closenessOfMatch: 0.5,
+      safemode: false,
+      wsHealthy: true,
+      tileStallCount: 0
+    }),
+    stageContext: {
+      screenShareActive: false,
+      activeSpeakerIntensity: 0,
+      eventDensity: 0,
+      closenessOfMatch: 0.5,
+      momentumScore: 0,
+      wsHealthy: true,
+      tileStallCount: 0
+    },
+    stageDirector: {
+      auto: true,
+      lockMode: null,
+      forceFeatureParticipantId: null,
+      disableAutoTransitions: false,
+      pinnedParticipants: []
+    }
   };
 }
 
@@ -339,6 +385,53 @@ function createRoom(code?: string) {
   if (!created.ok) return { ok: false as const, code: ErrorCode.ROOM_CAP_REACHED };
   return { ok: true as const, room: created.room };
 }
+function clamp01(value: number) {
+  return Math.max(0, Math.min(1, Number.isFinite(value) ? value : 0));
+}
+
+function computeCloseness(room: RoomState) {
+  const diff = Math.abs(room.scoreA.scoreTotal - room.scoreB.scoreTotal);
+  return clamp01(1 - diff / 8);
+}
+
+function evaluateStage(room: RoomState, wsHealthy: boolean, tileStallCount: number) {
+  const eventDensity = clamp01(room.telemetryEventsLast15s.length / 18);
+  const momentumScore = clamp01(Math.max(Math.abs(room.telemetryMomentum.lastDelta), Math.abs(room.telemetryMomentum.displayA - room.telemetryMomentum.displayB) / 10));
+  const activeSpeakerIntensity = clamp01(room.audioFocusParticipantId && room.audioFocusParticipantId !== "host" ? 0.72 : 0.35);
+  const screenShareActive = room.watchTogetherMode === "STAGE" || Boolean(room.stageDirector.forceFeatureParticipantId);
+  const closenessOfMatch = computeCloseness(room);
+
+  const stageLayout = computeStageLayout({
+    segment: room.currentSegment,
+    momentumScore,
+    screenShareActive,
+    activeSpeakerIntensity,
+    eventDensity,
+    closenessOfMatch,
+    safemode: safeMode.enabled,
+    wsHealthy,
+    tileStallCount,
+    directorLockMode: room.stageDirector.auto ? null : room.stageDirector.lockMode,
+    forceFeature: Boolean(room.stageDirector.forceFeatureParticipantId)
+  });
+
+  room.stageContext = {
+    screenShareActive,
+    activeSpeakerIntensity,
+    eventDensity,
+    closenessOfMatch,
+    momentumScore,
+    wsHealthy,
+    tileStallCount
+  };
+
+  if (room.stageMode !== stageLayout.mode) {
+    pushAutomation(room, "stage", `${room.stageMode} -> ${stageLayout.mode}`);
+  }
+  room.stageMode = stageLayout.mode;
+  room.stageLayout = stageLayout;
+}
+
 function broadcast<T>(roomCode: string, envelope: WsEnvelope<T> | Record<string, unknown>) {
   const sockets = roomSockets.get(roomCode); if (!sockets) return;
   const msg = JSON.stringify(envelope);
@@ -797,6 +890,39 @@ app.get("/rooms/:roomCode", assertRoomNodeMatch, (req, res) => {
   if (!room) return;
   res.json({ ok: true, room: { ...room, viewers: room.viewers.size, viewerCount: room.viewers.size, viewerCap: 200, protectionMode, safemode: safeMode.enabled } });
 });
+app.post("/rooms/:roomCode/stage-override", (req, res) => {
+  const room = requireRoom(res, req.params.roomCode);
+  if (!room) return;
+  const modeRaw = String(req.body.mode || "").toUpperCase();
+  const mode = (["LOBBY", "ACTIVE", "FEATURE", "CLUTCH", "RECOVERY"] as const).includes(modeRaw as StageMode) ? modeRaw as StageMode : null;
+  room.stageDirector.auto = false;
+  room.stageDirector.lockMode = mode;
+  room.stageDirector.forceFeatureParticipantId = typeof req.body.forceFeatureParticipantId === "string" ? sanitizeText(req.body.forceFeatureParticipantId) : null;
+  room.stageDirector.disableAutoTransitions = Boolean(req.body.disableAutoTransitions);
+  evaluateStage(room, true, 0);
+  res.json({ ok: true, stageDirector: room.stageDirector, stageMode: room.stageMode, stageLayout: room.stageLayout });
+});
+
+app.post("/rooms/:roomCode/stage-auto", (req, res) => {
+  const room = requireRoom(res, req.params.roomCode);
+  if (!room) return;
+  room.stageDirector.auto = true;
+  room.stageDirector.lockMode = null;
+  room.stageDirector.forceFeatureParticipantId = null;
+  room.stageDirector.disableAutoTransitions = false;
+  room.stageDirector.pinnedParticipants = [];
+  evaluateStage(room, true, 0);
+  res.json({ ok: true, stageDirector: room.stageDirector, stageMode: room.stageMode, stageLayout: room.stageLayout });
+});
+
+app.post("/rooms/:roomCode/stage-pin", (req, res) => {
+  const room = requireRoom(res, req.params.roomCode);
+  if (!room) return;
+  const list = Array.isArray(req.body.pinnedParticipants) ? req.body.pinnedParticipants.map((x: unknown) => sanitizeText(String(x))).filter(Boolean).slice(0, 6) : [];
+  room.stageDirector.pinnedParticipants = list;
+  res.json({ ok: true, pinnedParticipants: room.stageDirector.pinnedParticipants });
+});
+
 app.get("/rooms/:roomCode/moments", (req, res) => {
   const room = requireRoom(res, req.params.roomCode);
   if (!room) return;
@@ -1004,7 +1130,12 @@ app.post("/rooms/:roomCode/recap-overlay", (req, res) => {
 app.post("/rooms/:roomCode/end-match", (req, res) => {
   const room = requireRoom(res, req.params.roomCode);
   if (!room) return;
-  room.matchStatus = "ENDED"; room.battleMode = false; room.lifecycle = "ENDED";
+  room.matchStatus = "ENDED";
+  room.stageDirector.auto = true;
+  room.stageDirector.lockMode = null;
+  room.stageDirector.forceFeatureParticipantId = null;
+  room.stageDirector.disableAutoTransitions = false;
+  room.stageDirector.pinnedParticipants = []; room.battleMode = false; room.lifecycle = "ENDED";
   const season = activeSeason(); const winner = room.scoreA.scoreTotal >= room.scoreB.scoreTotal ? room.crewA : room.crewB; const loser = winner === room.crewA ? room.crewB : room.crewA;
   for (const [crew, won] of [[winner, true], [loser, false]] as const) {
     let row = season.leaderboard.find((r) => r.crew === crew);
@@ -1330,6 +1461,10 @@ setInterval(() => {
         }
       }
 
+      const wsHealthy = roomSockets.get(room.roomCode)?.size ? true : true;
+      const tileStallCount = 0;
+      evaluateStage(room, wsHealthy, tileStallCount);
+
       const statePayload = {
         maintenance: { state: room.maintenanceState, banner: maintenanceWindow.enabled ? maintenanceWindow : null },
         segment: { active: room.currentSegment, startedAt: room.segmentStartedAt, theme: runtimeSegmentTheme(room.currentSegment as any) },
@@ -1343,7 +1478,13 @@ setInterval(() => {
         announcer: { quietMode: room.announcerQuietMode },
         minigames: { emojiBudget: { max: 120, active: room.emojiPerSecond.count } },
         protection: { mode: protectionMode },
-        safemode: { enabled: safeMode.enabled, reason: safeMode.reason || null }
+        safemode: { enabled: safeMode.enabled, reason: safeMode.reason || null },
+        stage: {
+          mode: room.stageMode,
+          layout: room.stageLayout,
+          context: room.stageContext,
+          director: room.stageDirector
+        }
       };
 
       const gateAt = roomStateBroadcastGate.get(room.roomCode) || 0;
