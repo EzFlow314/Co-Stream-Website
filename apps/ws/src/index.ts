@@ -1465,5 +1465,5 @@ wss.on("connection", (socket, req) => {
   socket.on("close", () => { roomSockets.get(roomCode)?.delete(socket as WebSocket); });
 });
 
-const port = Number(process.env.WS_PORT || 4001);
-server.listen(port, () => console.log(`ws server on :${port}`));
+const port = Number(process.env.PORT || process.env.WS_PORT || 8080);
+server.listen(port, "0.0.0.0", () => console.log(`ws server on :${port}`));
