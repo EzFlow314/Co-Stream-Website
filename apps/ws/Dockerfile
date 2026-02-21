@@ -14,7 +14,7 @@ RUN pnpm --filter @bigroom/ws exec tsup src/index.ts --format esm --dts=false --
 
 WORKDIR /app/apps/ws
 ENV NODE_ENV=production
-ENV PORT=8080
-EXPOSE 8080
+ENV PORT=4001
+EXPOSE 4001
 
 CMD ["node", "dist/index.js"]
