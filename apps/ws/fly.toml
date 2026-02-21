@@ -1,21 +1,23 @@
-app = "co-stream-website"
-primary_region = "ord"
+# fly.toml app configuration file generated for bigroom-ws on 2026-02-21T22:54:44Z
+#
+# See https://fly.io/docs/reference/configuration/ for information about how to use this file.
+#
+
+app = 'bigroom-ws'
+primary_region = 'ord'
 
 [build]
-  dockerfile = "Dockerfile"
 
 [http_service]
   internal_port = 8080
   force_https = true
-  auto_stop_machines = "stop"
+  auto_stop_machines = 'stop'
   auto_start_machines = true
   min_machines_running = 0
-  processes = ["app"]
-
-[env]
-  WS_PORT = "8080"
+  processes = ['app']
 
 [[vm]]
-  memory = "1024"
-  cpu_kind = "shared"
+  memory = '1gb'
+  cpu_kind = 'shared'
   cpus = 1
+  memory_mb = 256
