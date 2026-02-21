@@ -19,9 +19,6 @@ RUN pnpm --filter @bigroom/shared build
 # Build ws
 RUN pnpm --filter @bigroom/ws build
 
-# Prune dev deps to shrink runtime + avoid weirdness
-RUN CI=true pnpm prune --prod
-
 # Run
 WORKDIR /app/apps/ws
 ENV NODE_ENV=production
