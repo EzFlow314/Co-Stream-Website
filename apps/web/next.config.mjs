@@ -1,6 +1,6 @@
 /** @type {import('next').NextConfig} */
 const nextConfig = {
-  experimental: { typedRoutes: true }
+  transpilePackages: ["@bigroom/shared"],
 };
 
-export default nextConfig;
+module.exports = nextConfig;
