@@ -20,7 +20,7 @@ RUN pnpm --filter @bigroom/shared build
 RUN pnpm --filter @bigroom/ws build
 
 # Prune dev deps to shrink runtime + avoid weirdness
-RUN pnpm prune --prod
+RUN CI=true pnpm prune --prod
 
 # Run
 WORKDIR /app/apps/ws
