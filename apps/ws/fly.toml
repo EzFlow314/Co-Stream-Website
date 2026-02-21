@@ -5,7 +5,7 @@ primary_region = "ord"
   dockerfile = "Dockerfile"
 
 [http_service]
-  internal_port = 4001
+  internal_port = 8080
   force_https = true
   auto_stop_machines = "stop"
   auto_start_machines = true
@@ -13,7 +13,7 @@ primary_region = "ord"
   processes = ["app"]
 
 [env]
-  WS_PORT = "4001"
+  WS_PORT = "8080"
 
 [[vm]]
   memory = "1024"
