@@ -16,6 +16,6 @@ primary_region = "ord"
   WS_PORT = "4001"
 
 [[vm]]
-  memory = "1024mb"
+  memory = "1024"
   cpu_kind = "shared"
   cpus = 1
