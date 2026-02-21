@@ -2,7 +2,7 @@ app = "co-stream-website"
 primary_region = "ord"
 
 [build]
-  dockerfile = "apps/ws/Dockerfile"
+  dockerfile = "Dockerfile"
 
 [http_service]
   internal_port = 4001
