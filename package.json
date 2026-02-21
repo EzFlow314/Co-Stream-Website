@@ -27,5 +27,13 @@
     "test:v12.9:safemode": "node scripts/v12_9_safemode_harness.mjs",
     "test:v12.9:feedback": "pnpm --filter @bigroom/ws exec tsx --test ../../apps/web/lib/feedback-context.test.ts ../../apps/web/lib/error-copy.test.ts && node scripts/v12_9_feedback_test.mjs",
     "test:v12.9:alpha-gate": "pnpm test:v12.9:config && pnpm test:v12.9:safemode && pnpm test:v12.9:feedback && pnpm test:v12.7:router"
+  },
+  "pnpm": {
+    "onlyBuiltDependencies": [
+      "@prisma/client",
+      "@prisma/engines",
+      "esbuild",
+      "prisma"
+    ]
   }
 }
