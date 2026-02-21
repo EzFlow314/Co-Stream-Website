@@ -4,7 +4,7 @@
   "packageManager": "pnpm@10.18.3",
   "scripts": {
     "dev": "pnpm run preflight && pnpm -r --parallel dev",
-    "build": "pnpm -r build",
+    "build:web": "pnpm --filter @bigroom/web... build",
     "lint": "pnpm -r lint",
     "typecheck": "pnpm -r typecheck",
     "format": "pnpm -r format",
