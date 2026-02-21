@@ -21,5 +21,5 @@ RUN pnpm --filter @bigroom/ws build
 # Run ws
 WORKDIR /app/apps/ws
 ENV NODE_ENV=production
-EXPOSE 8080
+EXPOSE 4001
 CMD ["node", "dist/index.js"]
