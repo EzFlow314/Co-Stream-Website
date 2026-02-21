@@ -6,6 +6,8 @@ RUN corepack enable
 COPY package.json ./
 COPY pnpm-lock.yaml* ./
 
+RUN node -e "console.log(require('./package.json').scripts)"
+
 RUN pnpm install --frozen-lockfile=false
 
 COPY . .
