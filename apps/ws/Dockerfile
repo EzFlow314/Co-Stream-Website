@@ -1,4 +1,3 @@
-# apps/ws/Dockerfile
 FROM node:20-slim
 
 WORKDIR /app
@@ -6,21 +5,22 @@ WORKDIR /app
 # Enable pnpm
 RUN corepack enable
 
-# Copy monorepo manifests first for better caching
+# Copy monorepo manifests first (repo root)
 COPY pnpm-lock.yaml pnpm-workspace.yaml package.json ./
-COPY apps/ws/package.json apps/ws/package.json
+
+# Copy workspace packages + ws app
 COPY packages ./packages
 COPY apps/ws ./apps/ws
 
-# Install deps (monorepo)
+# Install deps for the whole workspace
 RUN pnpm install --frozen-lockfile
 
-# Build ONLY ws (avoid broken "--dts false" script)
-# Use correct flag format so tsup doesn't treat "false" like an entry module
-RUN pnpm --filter @bigroom/ws exec tsup src/index.ts --format esm --dts=false
+# Build only ws
+RUN pnpm --filter @bigroom/ws build
 
 # Run ws
 WORKDIR /app/apps/ws
 ENV NODE_ENV=production
+ENV WS_PORT=4001
 EXPOSE 4001
 CMD ["node", "dist/index.js"]
