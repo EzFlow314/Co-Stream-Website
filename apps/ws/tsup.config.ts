@@ -1,10 +1,9 @@
-import { defineConfig } from "tsup";
+import { defineConfig } from 'tsup';
 
 export default defineConfig({
-  entry: ["src/index.ts"],
-  format: ["esm"],
-  target: "es2022",
-  dts: false,
-  sourcemap: false,
+  entry: ['src/index.ts'],
+  format: ['esm'],
   clean: true,
+  // Force tsup to bundle these internal packages instead of leaving them external
+  noExternal: ['contracts', 'shared'], 
 });
