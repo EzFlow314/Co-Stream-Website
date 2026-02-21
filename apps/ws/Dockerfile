@@ -3,27 +3,21 @@ FROM node:20-slim
 WORKDIR /app
 RUN corepack enable
 
-# Copy workspace manifests
-COPY pnpm-lock.yaml pnpm-workspace.yaml package.json ./
-
-# Copy workspace source
-COPY packages ./packages
-COPY apps/ws ./apps/ws
+# Copy only WS package files first (better caching)
+COPY package.json ./
+COPY pnpm-lock.yaml* ./
 
 # Install deps
-RUN pnpm install --frozen-lockfile
+RUN pnpm install --frozen-lockfile=false
 
-# Build shared first (and any other packages your ws depends on)
-RUN pnpm --filter @bigroom/shared build
+# Copy the rest of the WS app
+COPY . .
 
-RUN pnpm install
+# Build TypeScript (tsup)
+RUN pnpm run build
 
-# Build ws
-RUN pnpm --filter @bigroom/ws build
-
-# Run
-WORKDIR /app/apps/ws
 ENV NODE_ENV=production
-ENV PORT=8080
 EXPOSE 8080
+
+# Run compiled server (adjust if your output path differs)
 CMD ["node", "dist/index.js"]
