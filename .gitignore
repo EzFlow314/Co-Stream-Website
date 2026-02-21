@@ -7,3 +7,6 @@ dist
 *.tsbuildinfo
 reports/feedback/
 *.log
+.vs/
+*.sqlite
+*.db
