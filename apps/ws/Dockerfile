@@ -1,20 +1,30 @@
 FROM node:20-slim
-WORKDIR /app
 
+WORKDIR /app
 RUN corepack enable
 
+# Copy workspace manifests
 COPY pnpm-lock.yaml pnpm-workspace.yaml package.json ./
+
+# Copy workspace source
 COPY packages ./packages
 COPY apps/ws ./apps/ws
 
+# Install deps
 RUN pnpm install --frozen-lockfile
 
-# Important: do NOT run the package build script if it's broken
-RUN pnpm --filter @bigroom/ws exec tsup src/index.ts --format esm --dts=false --clean
+# Build shared first (and any other packages your ws depends on)
+RUN pnpm --filter @bigroom/shared build
 
+# Build ws
+RUN pnpm --filter @bigroom/ws build
+
+# Prune dev deps to shrink runtime + avoid weirdness
+RUN pnpm prune --prod
+
+# Run
 WORKDIR /app/apps/ws
 ENV NODE_ENV=production
-ENV PORT=4001
-EXPOSE 4001
-
+ENV PORT=8080
+EXPOSE 8080
 CMD ["node", "dist/index.js"]
