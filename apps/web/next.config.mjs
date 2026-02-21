@@ -3,4 +3,4 @@ const nextConfig = {
   transpilePackages: ["@bigroom/shared"],
 };
 
-module.exports = nextConfig;
+export default nextConfig;
