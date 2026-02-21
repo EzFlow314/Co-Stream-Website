@@ -16,6 +16,8 @@ RUN pnpm install --frozen-lockfile
 # Build shared first (and any other packages your ws depends on)
 RUN pnpm --filter @bigroom/shared build
 
+RUN pnpm install
+
 # Build ws
 RUN pnpm --filter @bigroom/ws build
 
